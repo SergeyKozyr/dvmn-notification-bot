@@ -2,6 +2,7 @@ import requests
 import os
 import time
 import telegram
+import logging
 from textwrap import dedent
 from dotenv import load_dotenv
 
@@ -14,6 +15,7 @@ def main():
   bot = telegram.Bot(token=telegram_token)
   headers = {'Authorization': f'Token {dvmn_token}'}
   payload = {}
+  logging.warning('Бот запущен')
 
   while True:
     try:
