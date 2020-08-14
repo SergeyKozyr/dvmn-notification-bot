@@ -7,10 +7,23 @@ from textwrap import dedent
 from dotenv import load_dotenv
 
 
-def main():
-  telegram_notification_bot_token = os.getenv('TG_NOTIFICATION_BOT_TOKEN')
-  dvmn_token = os.getenv('DVMN_TOKEN')
-  notification_bot = telegram.Bot(token=telegram_notification_bot_token)
+logger = logging.getLogger()
+
+
+class MyLogsHandler(logging.Handler):
+
+  def __init__(self, logging_bot, chat_id):
+    super().__init__()
+    self.chat_id = chat_id
+    self.logging_bot = logging_bot
+
+  def emit(self, record):
+    log_entry = self.format(record)
+    self.logging_bot.send_message(chat_id=self.chat_id, text=log_entry)
+
+
+def get_dvmn_review(dvmn_token):
+
   headers = {'Authorization': f'Token {dvmn_token}'}
   payload = {}
 
@@ -24,28 +37,12 @@ def main():
         raise requests.exceptions.HTTPError(server_response['error'])
 
       if server_response['status'] == 'timeout':
-        payload['timestamp'] = f'{server_response["timestamp_to_request"]}'
+        payload['timestamp'] = str(server_response["timestamp_to_request"])
         continue
 
       if server_response['status'] == 'found':
-        payload['timestamp'] = f'{server_response["last_attempt_timestamp"]}'
+        payload['timestamp'] = str(server_response["last_attempt_timestamp"])
         review = server_response['new_attempts'][0]
-
-        if review['is_negative']:
-          notification_bot.send_message(chat_id=chat_id, text=dedent(f'''
-            У вас проверили работу «{review['lesson_title']}»
-
-            К сожалению, в работе нашлись ошибки.
-
-            Ссылка на задачу: https://dvmn.org{review['lesson_url']}'''))
-
-        else:
-          notification_bot.send_message(chat_id=chat_id, text=dedent(f'''
-          У вас проверили работу «{review['lesson_title']}»
-
-          Преподавателю всё понравилось, можно приступать к следующему уроку!
-
-          Ссылка на задачу: https://dvmn.org{review['lesson_url']}'''))
 
     except requests.exceptions.ConnectionError:
       print('No internet connection, retrying in 10 seconds')
@@ -55,28 +52,54 @@ def main():
     except requests.exceptions.ReadTimeout:
       continue
 
-    except Exception:
-      logger.exception('Бот упал с ошибкой: ')
-      time.sleep(10)
-      continue
+  return review
 
 
-if __name__ == '__main__':
+def send_notification(review, notification_bot, chat_id):
+
+  if review['is_negative']:
+    notification_bot.send_message(chat_id=chat_id, text=dedent(f'''
+    У вас проверили работу «{review['lesson_title']}»
+
+    К сожалению, в работе нашлись ошибки.
+
+    Ссылка на задачу: https://dvmn.org{review['lesson_url']}'''))
+
+  else:
+    notification_bot.send_message(chat_id=chat_id, text=dedent(f'''
+  У вас проверили работу «{review['lesson_title']}»
+
+  Преподавателю всё понравилось, можно приступать к следующему уроку!
+
+  Ссылка на задачу: https://dvmn.org{review['lesson_url']}'''))
+
+
+def main():
 
   load_dotenv()
   telegram_logging_bot_token = os.getenv('TG_LOGGING_BOT_TOKEN')
-  logging_bot = telegram.Bot(token=telegram_logging_bot_token)
+  telegram_notification_bot_token = os.getenv('TG_NOTIFICATION_BOT_TOKEN')
   chat_id = os.getenv('TG_CHAT_ID')
+  dvmn_token = os.getenv('DVMN_TOKEN')
 
-  class MyLogsHandler(logging.Handler):
-    def emit(self, record):
-      log_entry = self.format(record)
-      logging_bot.send_message(chat_id=chat_id, text=log_entry)
+  logging_bot = telegram.Bot(token=telegram_logging_bot_token)
+  notification_bot = telegram.Bot(token=telegram_notification_bot_token)
 
   logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-  logger = logging.getLogger()
   logger.setLevel(logging.INFO)
-  logger.addHandler(MyLogsHandler())
+  logger.addHandler(MyLogsHandler(logging_bot, chat_id))
   logger.info('Бот запущен')
 
+  while True:
+
+    try:
+      review = get_dvmn_review(dvmn_token)
+      send_notification(review, notification_bot, chat_id)
+
+    except Exception:
+      logger.exception('Бот упал с ошибкой: ')
+      time.sleep(10)
+
+
+if __name__ == '__main__':
   main()
