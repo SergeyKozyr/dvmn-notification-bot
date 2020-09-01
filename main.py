@@ -88,7 +88,7 @@ def main():
   logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
   logger.setLevel(logging.INFO)
   logger.addHandler(MyLogsHandler(logging_bot, chat_id))
-  logger.info('Бот запущен')
+  logger.info('Бот dvmn-notification запущен')
 
   while True:
 
@@ -97,7 +97,7 @@ def main():
       send_notification(review, notification_bot, chat_id)
 
     except Exception:
-      logger.exception('Бот упал с ошибкой: ')
+      logger.exception('Бот dvmn-notification упал с ошибкой: ')
       time.sleep(10)
 
 
